@@ -44,7 +44,6 @@ func (this *AppTrans) Submit(orderId string, amount float64, desc string, client
 	if err != nil {
 		return "", err
 	}
-
 	//Verify the sign of response
 	resultInMap := placeOrderResult.ToMap()
 	wantSign := Sign(resultInMap, this.Config.AppKey)
@@ -62,6 +61,37 @@ func (this *AppTrans) Submit(orderId string, amount float64, desc string, client
 	}
 
 	return placeOrderResult.PrepayId, nil
+}
+
+func (this *AppTrans) NativeCodeUrl(orderId string, amount float64, desc string, clientIp string) (PlaceOrderResult, error) {
+
+	odrInXml := this.signedOrderRequestXmlString(orderId, fmt.Sprintf("%.0f", amount), desc, clientIp)
+	resp, err := doHttpPost(this.Config.PlaceOrderUrl, []byte(odrInXml))
+	if err != nil {
+		return PlaceOrderResult{}, err
+	}
+
+	placeOrderResult, err := ParsePlaceOrderResult(resp)
+	if err != nil {
+		return PlaceOrderResult{}, err
+	}
+	//Verify the sign of response
+	resultInMap := placeOrderResult.ToMap()
+	wantSign := Sign(resultInMap, this.Config.AppKey)
+	gotSign := resultInMap["sign"]
+	if wantSign != gotSign {
+		return PlaceOrderResult{}, fmt.Errorf("sign not match, want:%s, got:%s", wantSign, gotSign)
+	}
+
+	if placeOrderResult.ReturnCode != "SUCCESS" {
+		return PlaceOrderResult{}, fmt.Errorf("return code:%s, return desc:%s", placeOrderResult.ReturnCode, placeOrderResult.ReturnMsg)
+	}
+
+	if placeOrderResult.ResultCode != "SUCCESS" {
+		return PlaceOrderResult{}, fmt.Errorf("resutl code:%s, result desc:%s", placeOrderResult.ErrCode, placeOrderResult.ErrCodeDesc)
+	}
+
+	return placeOrderResult, nil
 }
 
 func (this *AppTrans) newQueryXml(transId string) string {
@@ -82,7 +112,6 @@ func (this *AppTrans) Query(transId string) (QueryOrderResult, error) {
 	queryOrderResult := QueryOrderResult{}
 
 	queryXml := this.newQueryXml(transId)
-	// fmt.Println(queryXml)
 	resp, err := doHttpPost(this.Config.QueryOrderUrl, []byte(queryXml))
 	if err != nil {
 		return queryOrderResult, nil
@@ -133,7 +162,7 @@ func (this *AppTrans) NewPaymentRequest(prepayId string) PaymentRequest {
 	return payRequest
 }
 
-func (this *AppTrans) newOrderRequest(orderId, amount, desc, clientIp string) map[string]string {
+func (this *AppTrans) NewOrderRequest(orderId, amount, desc, clientIp string) map[string]string {
 	param := make(map[string]string)
 	param["appid"] = this.Config.AppId
 	param["attach"] = "透传字段" //optional
@@ -145,14 +174,12 @@ func (this *AppTrans) newOrderRequest(orderId, amount, desc, clientIp string) ma
 	param["spbill_create_ip"] = clientIp
 	param["total_fee"] = amount
 	param["trade_type"] = this.Config.TradeType
-
 	return param
 }
 
 func (this *AppTrans) signedOrderRequestXmlString(orderId, amount, desc, clientIp string) string {
-	order := this.newOrderRequest(orderId, amount, desc, clientIp)
+	order := this.NewOrderRequest(orderId, amount, desc, clientIp)
 	sign := Sign(order, this.Config.AppKey)
-	// fmt.Println(sign)
 
 	order["sign"] = sign
 
@@ -182,6 +209,5 @@ func doHttpPost(targetUrl string, body []byte) ([]byte, error) {
 	if err != nil {
 		return []byte(""), err
 	}
-
 	return respData, nil
 }
