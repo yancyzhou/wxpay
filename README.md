@@ -45,4 +45,4 @@ fmt.Println(queryResult)
 
 # document
 
-Please refer to [gowalker](https://gowalker.org/github.com/imzjy/wxpay)
+Please refer to [gowalker](https://gowalker.org/github.com/yancyzhou/wxpay)
